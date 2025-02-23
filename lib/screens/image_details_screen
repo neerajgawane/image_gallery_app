@@ -1,0 +1,162 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:provider/provider.dart';
+import '../providers/gallery_provider.dart';
+import '../models/image_item.dart';
+
+class ImageDetailsScreen extends StatelessWidget {
+  final ImageItem image;
+
+  const ImageDetailsScreen({super.key, required this.image});
+
+  Future<void> _shareImage(BuildContext context) async {
+    try {
+      if (image.isAsset) {
+        await Share.share(
+          'Check out this image: ${image.title}\n${image.description}',
+          subject: image.title,
+        );
+      } else {
+        await Share.shareXFiles(
+          [XFile(image.path)],
+          text: image.title,
+          subject: image.description,
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to share image: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _deleteImage(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Image'),
+        content: const Text('Are you sure you want to delete this image?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await Provider.of<GalleryProvider>(context, listen: false)
+            .deleteImage(image.id);
+        Navigator.of(context).pop(); // Return to gallery
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete image: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(image.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: () => _shareImage(context),
+          ),
+          if (!image.isAsset)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: () => _deleteImage(context),
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InteractiveViewer(
+              panEnabled: true,
+              boundaryMargin: const EdgeInsets.all(20),
+              minScale: 0.5,
+              maxScale: 4,
+              child: Hero(
+                tag: image.id,
+                child: image.isAsset
+                    ? Image.asset(
+                        image.path,
+                        fit: BoxFit.cover,
+                        height: 300,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(
+                            child: Icon(Icons.error_outline, color: Colors.red),
+                          );
+                        },
+                      )
+                    : Image.file(
+                        File(image.path),
+                        fit: BoxFit.cover,
+                        height: 300,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(
+                            child: Icon(Icons.error_outline, color: Colors.red),
+                          );
+                        },
+                      ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    image.title,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    image.description,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Added on: ${_formatDate(image.dateAdded)}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey,
+                        ),
+                  ),
+                  if (image.tags.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      children: image.tags.map((tag) => Chip(
+                        label: Text(tag),
+                        backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                      )).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+}
